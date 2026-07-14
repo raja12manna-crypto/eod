@@ -44,7 +44,8 @@ body{
   min-height:100vh;
   display:flex; flex-direction:column;
   user-select:none; -webkit-user-select:none;
-  touch-action:manipulation;
+  touch-action:pan-y; /* allow vertical scroll by default */
+  overscroll-behavior:none;
 }
 
 /* ---------- Top bar ---------- */
@@ -112,6 +113,7 @@ body{
 }
 .stock,.waste,.foundation{
   border:2px dashed rgba(255,255,255,.28);
+  touch-action:none;
 }
 .stock{cursor:pointer;}
 .pile-hint{
@@ -140,6 +142,8 @@ body{
   box-shadow:0 2px 5px rgba(0,0,0,.4);
   cursor:pointer;
   transition:box-shadow .15s ease;
+  touch-action:none; /* prevent browser scroll/zoom on card touch */
+  -webkit-touch-callout:none;
 }
 .card.selected{
   outline:3px solid var(--yellow);
@@ -928,16 +932,21 @@ document.addEventListener("pointerdown", (e) => {
   const cardNode = e.target.closest(".card");
   if (!cardNode) return;
 
+  // Prevent browser from stealing the touch for scrolling or context menus
+  e.preventDefault();
+
   const pileKey = cardNode.dataset.pile;
   const index = +cardNode.dataset.index;
 
   if (infoDot){
     // handled on pointerup as a tap; mark so we don't treat as move
     pointer = { info: true, el: cardNode, pileKey, index, startX: e.clientX, startY: e.clientY, dragging: false };
+    cardNode.setPointerCapture(e.pointerId);
     return;
   }
   if (pileKey === "stock") {
     pointer = { stock: true, startX: e.clientX, startY: e.clientY, dragging: false };
+    cardNode.setPointerCapture(e.pointerId);
     return;
   }
 
@@ -954,17 +963,21 @@ document.addEventListener("pointerdown", (e) => {
     offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top,
     dragging: false, ghost: null
   };
-});
+  // Capture pointer so events keep firing even if finger leaves the card element
+  cardNode.setPointerCapture(e.pointerId);
+}, { passive: false });
 
 document.addEventListener("pointermove", (e) => {
   if (!pointer || pointer.info || pointer.stock) return;
+  // Always prevent default once we're tracking a card — stops page scroll
+  // during the drag-threshold window as well as during an active drag.
+  e.preventDefault();
   const dx = e.clientX - pointer.startX;
   const dy = e.clientY - pointer.startY;
   if (!pointer.dragging && Math.hypot(dx, dy) > DRAG_THRESHOLD){
     beginDrag(e);
   }
   if (pointer.dragging){
-    e.preventDefault();
     moveGhost(e.clientX, e.clientY);
     highlightDrop(e.clientX, e.clientY);
   }
